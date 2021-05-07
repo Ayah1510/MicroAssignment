@@ -1,0 +1,536 @@
+;data can be 4 or 3 bits only and not all data have to be the same  in the same run
+;address size must be the same for all lines in the same run
+
+.model small
+.stack 100
+.data
+
+filename db "mydata.txt",0 
+filename2 db "out.txt",0
+filehandel dw ?      
+filehandle2 dw ?
+buf db  500 dup(0),"$"
+address db 5 dup(0),"$"
+addressFinal 4 dup(0)
+addressSize 1 dup(0)      ; with the colon
+dataSize 1 dup(0)  
+numOfLines 1 dup(0)
+data1 db 5 dup(0),"$"
+data1Final db 5 dup(0),"$"
+alldata db 200 dup(0) 
+answer db 200 dup(0)
+finalAnswer db 200 dup(0)   
+databytes db 10 dup ('$')   
+message1 db "Please enter your choice: $"                                     
+message2 db "1-Read input from user(keyboard)   2-Read input from text file$" 
+message3 db "Please enter the data separated by space$"
+dataStr dw 300
+        db 0
+        dw 300 dup(0)
+buff1 db 3 
+      db 0 
+      db 3 dup (0)     
+.code
+mov ax,@data
+mov ds,ax
+
+mov ah,09     ;view message1
+Lea dx, message1 
+int 21h       
+
+mov dl,10     ;to print a new line
+mov ah,2
+int 21h
+mov dl,13     ;for carriage return
+mov ah,2
+int 21h
+
+mov ah,09     ;view message2
+Lea dx, message2
+int 21h       
+
+mov dl,10     ;to print a new line
+mov ah,2
+int 21h
+mov dl,13     ;for carriage return
+mov ah,2
+int 21h
+
+mov ah, 0Ah   ; input of a string to DS:DX, fist byte is buffer size, second byte is number of chars actually read
+Lea dx, buff1
+int 21h  
+
+cmp buff1[2],32h
+je fromfile
+mov dl,10     ;to print a new line
+mov ah,2
+int 21h
+mov dl,13     ;for carriage return
+mov ah,2
+int 21h
+mov ah,09     ;view message3
+Lea dx, message3
+int 21h
+mov dl,10     ;to print a new line
+mov ah,2
+int 21h
+mov dl,13     ;for carriage return
+mov ah,2
+int 21h       
+mov ah, 0Ah   ; input of a string to DS:DX, fist byte is buffer size, second byte is number of chars actually read
+Lea dx, dataStr
+int 21h        
+mov si,2     ;the first two bytes are for the size
+mov ax,0
+mov di,0    
+
+copytobuff: mov ax,dataStr[si]
+            cmp al,0Dh              ;the last byte of the input is enter
+            je finish2
+            cmp ah,0Dh
+            je finish2
+            cmp al,20h      ;if space is found then it will be changed to new line and  carriage return, because the code works on this which is what found in the file
+            jne alNotSpace
+            mov buf[di],0Dh    ;move the carriage return first 
+            mov buf[di+1],0Ah  ;move the new line
+            mov buf[di+2],ah   ;move the next byte
+            add di,3 
+            add si,2
+            jmp finish
+            alNotSpace:
+            cmp ah,20h
+            jne ahNotSpace
+            mov buf[di],al
+            mov buf[di+1],0Dh
+            mov buf[di+2],0Ah 
+            add di,3
+            add si,2
+            jmp finish
+            ahNotSpace:       ;if not space is found then data will be moved with no change
+            mov buf[di],al
+            mov buf[di+1],ah
+            add di,2 
+            add si,2
+            finish:
+            jmp copytobuff
+            finish2:
+            cmp ah,0Dh        ;the carriage return and another data could be in the same word (if no data is found,then zero will be moved and it wont affect)
+            je finish3
+            mov buf[di],ah
+            jmp finish4
+            finish3:
+            mov buf[di],al
+            finish4:
+                         
+jmp done
+fromfile:
+;open file to read
+mov ah,3DH
+lea dx,filename
+mov al,0
+int 21h
+
+
+;read file contents
+mov filehandel,ax
+mov bx,ax
+mov ah,3fh
+lea dx,buf
+mov cx,500   
+int 21h
+
+done:
+;to count number of lines,to use to read data in a loop
+mov si,0 
+mov di,0
+count: cmp buf[si],0Dh    ;finding number oflines by counting number of carriage return
+       je newline
+       cmp buf[si],0h     ;bc last line doesnot end with an enter or carriage return
+       je exit  
+       inc si
+       jmp count
+
+newline: inc di  
+         inc si
+         jmp count
+ 
+
+exit:   
+mov ax,di
+mov numOfLines[0],al
+
+;to findthe first address and save it in the address buffer  
+mov si,0  
+l1:mov ch,[buf+si]
+   cmp ch,3Ah         ;the address is characters before the colon
+   jne l2  
+   jmp cont 
+l2:mov address[si],ch 
+cont:
+   inc si 
+   cmp ch,3Ah 
+   je n        
+   jmp l1    
+
+n:  
+mov cx,4       
+mov di,0   
+;by making all the chars zero, it will be easier when the address is not4 digits                           
+MakeZero: mov addressFinal[di],30h    
+          inc di
+loop makeZero
+
+;to move the address to the final buffer and considering if it is less than 4 digits   
+mov di,si   
+mov cx,si     
+mov addressSize[0],cl
+push si
+mov si,0
+dec di
+mov cx,di 
+copy:mov dh,[address+si] 
+     mov bx,4
+     sub bx,di
+     add bx,si
+     mov addressFinal[bx],dh    
+     inc si
+     loop copy
+
+
+pop si      ;to save the address
+push si  
+mov bx,0
+mov di,0  
+;to get thefirst data in the first line
+l3:mov ch,[buf+si]
+   cmp ch,0Dh   ;the data is followed by the carriage return
+   jne l4  
+   jmp cont2 
+l4:
+   mov data1[di],ch  
+   inc bx
+cont2:
+   inc si  
+   inc di
+   cmp ch,0Dh 
+   je n2
+   jmp l3
+
+
+n2: 
+; to considerdata less than 4 digits
+mov cx,4       
+mov di,0                              
+MakedZero: mov data1Final[di],30h    
+          inc di
+loop makedZero 
+
+mov di,bx
+mov dataSize[0],bl
+push bx
+mov si,0
+mov cx,di 
+copy2:mov dh,[data1+si] 
+     mov bx,4
+     sub bx,di
+     add bx,si
+     mov data1Final[bx],dh    
+     inc si
+     loop copy2
+
+mov cx,4
+mov di,0
+MoveData:mov al,data1Final[di]
+         mov alldata[di],al
+         inc di  
+loop MoveData  
+;if the input has only one line
+cmp numOfLines,0
+je exit2
+
+;loop to get the rest data, depending on the number of lines
+moveAllData:
+pop di     ;data
+pop si     ;address
+mov bh,0
+mov bl,addressSize[0]  ;to ad the addres size each loop
+add si,bx 
+add si,2      ;for the carriage return and the new line
+push si
+push di  
+add si,di    ; to add the data with the address
+mov di,0     
+mov bx,0   
+;to savethe data in a buffer
+l5:mov ch,[buf+si]
+   cmp ch,0Dh    ;checking for the carriage return
+   jne l6  
+   jmp cont3 
+l6:cmp ch,0h     ;the last line does not contain carriage return 
+   je cont3
+   mov data1[di],ch
+   inc bx 
+cont3:
+   inc si
+   inc di 
+   cmp ch,0Dh 
+   je n3 
+   cmp ch,0h
+   je n3
+   jmp l5       
+
+n3: 
+pop si     ;data
+mov di,si
+add di,bx  
+mov dataSize[0],bl   ;change data size for the new data
+push di
+push si    
+   
+mov cx,4       
+mov di,0                              
+MakeadZero: mov data1Final[di],30h    
+          inc di
+loop makeadZero 
+;to consider data size less than 4 digits
+mov cl,dataSize[0]
+mov ch,0
+mov di,cx
+mov si,0
+mov cx,di 
+copyad:mov dh,[data1+si] 
+     mov bx,4
+     sub bx,di
+     add bx,si
+     mov data1Final[bx],dh    
+     inc si
+     loop copyad
+     
+
+pop di
+;test di,1h  ;if the number of addresses is odd then one will be added
+;je conti
+;inc di 
+conti:
+mov si,0  
+mov di,0
+MoveaData:mov al,alldata[si]      ;all data will be in one buffer
+          cmp al,0h
+          je jmp fin
+          inc si 
+          jmp MoveaData  
+
+fin:
+mov cx,4
+fin2:mov al,data1Final[di]
+     mov alldata[si],al
+     inc di
+     inc si
+     loop fin2  
+
+;decreasingthe number of lines
+mov dl,numOfLines[0] 
+dec dl
+cmp dl,0
+je exit2
+mov numOfLines[0],dl  ;when  all the data has been saved
+jmp moveAllData 
+
+exit2:   
+
+;to count data, so the byte count could be found
+;counting until 0h is found
+mov si,0 
+mov di,0
+countData: mov cl,alldata[si]
+           cmp cl,0h
+           je exit3
+           inc di  
+           inc si
+           jmp countData
+
+;dividing the count by  2
+exit3:  
+mov ax,di 
+mov bl,2           
+div bl  
+mov ah,0 
+
+;change byte count to decimal, so it will be added to the result
+mov si,2
+mov cx,0
+mov bx,10
+change2dec: mov dx,0
+            div bx
+            add dl,30h
+            push dx
+            inc cx
+            cmp ax,9
+            jg change2dec
+mov si,0 
+add al,30h
+mov dataBytes[si],al
+save: pop ax
+      inc si
+      mov dataBytes[si],al
+      loop save   
+
+;moving the byte count  to result
+mov cl,dataBytes[0]     
+mov answer[0],cl
+mov cl,dataBytes[1]     
+mov answer[1],cl   
+;moving the address to result
+mov cl,addressFinal[0]     
+mov answer[2],cl
+mov cl,addressFinal[1]     
+mov answer[3],cl  
+mov cl,addressFinal[2]     
+mov answer[4],cl
+mov cl,addressFinal[3]     
+mov answer[5],cl
+
+;moving 00 to result which represents the type
+mov cl,30h
+mov answer[6],cl
+mov answer[7],cl
+
+;moving the data
+mov si,0 
+mov cx,di 
+push di
+mov di,8
+copyalldata:mov bl,alldata[si]
+            mov answer[di],bl
+            inc si
+            inc di 
+            loop copyalldata    
+
+;calculating the checksum  
+;in changing to hexadecimal 
+;if number then 30h must be subtracted 
+;if aphabet then 55d must be subtracted         
+mov si,0 
+push 0 
+addData:mov al,answer[si]
+        cmp al,0h             ;the end of the string is 0h
+        je exit4   
+        cmp al,40h
+        ja alphabet
+        sub al,30h
+        jmp continue
+        alphabet:sub ax,55
+        continue:      
+        mov cl,10h 
+        mul cl
+        push ax  
+        mov al,answer[si+1] 
+        cmp al,40h
+        ja alphabet2
+        sub al,30h
+        jmp continue2
+        alphabet2:sub ax,55
+        continue2: 
+        mov ah,0
+        pop dx
+        add ax,dx 
+        pop dx
+        add ax,dx
+        push ax
+        add si,2 
+        jmp addData
+
+exit4:
+pop ax
+not al            ;1st comlement
+add al,00000001B  ;to make 2nd complement
+mov ah,0          ;to take only the last two digits
+mov cl,10h        ;to split the digits (quotient in al and remainder in ah)
+div cl
+mov bx,0
+mov bl,al
+mov al,ah  
+mov ah,0          ;if the number is alphabet  (to change the two digits into decimal)
+cmp al,9h
+ja alphabet3
+add al,30h
+jmp continue3
+alphabet3:add ax,55
+continue3:
+cmp bl,9h
+ja alphabet4
+add bl,30h
+jmp continue4
+alphabet4:add bx,55
+continue4:  
+mov ah,bl
+
+;add checksum at the end of the result
+mov si,0
+addCheckSum:mov cl,answer[si]
+             cmp cl,0h
+             je ad
+             inc si 
+             jmp addCheckSum   
+             ad:mov answer[si],ah
+                mov answer[si+1],al 
+
+;moving all the result to finalanswer                
+mov cl,':'
+mov finalAnswer[0],cl
+mov si,1
+mov di,0
+finalResult:mov cl,answer[di]
+            cmp cl,0h
+            je exit5
+            mov finalAnswer[si],cl
+            inc si
+            inc di
+            jmp finalResult
+
+exit5: 
+mov cl,13
+mov finalAnswer[si],cl
+inc si
+mov cl,10
+mov finalAnswer[si],cl
+inc si
+mov cl,':'
+mov finalAnswer[si],cl 
+inc si    
+mov cx,7
+mov al,30h
+moveZeros:mov finalAnswer[si],al
+          inc si
+          loop moveZeros  
+mov cl,'1'
+mov finalAnswer[si],cl 
+inc si
+mov cl,'F'
+mov finalAnswer[si],cl
+inc si
+mov cl,'F'
+mov finalAnswer[si],cl
+                           
+;open file
+mov ah,3ch
+lea dx,filename2
+mov cx,0 
+int 21h
+             
+mov filehandle2,ax
+mov ah,40h
+mov bx,filehandle2
+mov cx,50
+lea dx,finalAnswer
+int 21h
+
+
+;close file
+mov ah,3eh
+mov bx,filehandel
+int 21h
+
+mov ah,3eh
+mov bx,filehandle2
+int 21h                                                                                        
