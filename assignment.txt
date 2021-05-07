@@ -1,0 +1,62 @@
+import math
+
+
+def intelHex(data):
+    address = data[0]  # The address is the first part in the given data
+    address = str(0) + str(0) + str(0) + str(
+        address)  # to make the address of 4 bits,can't put str(000) bc it will make it str(0)
+    address = address[-4:]  # take last 4 bits
+    data = data[1::2]  # To keep only the data by deleting the even indices
+    dataStr = ""
+    for i in data:  # To make each data contains even bits
+        if len(i) % 2 != 0:
+            i = "0" + i
+        dataStr += i
+    numOfBytes = int(len(dataStr) / 2)  # find length of the string then divided by 2 because every two bits is one byte
+    numOfBytes = str(0) + str(numOfBytes)  # add zero at the beginning to make it always 2 bits
+    numOfBytes = numOfBytes[-2:]  # take last two bits
+    res = numOfBytes + address + str(0) + str(0) + dataStr
+    splitStr = []
+    for i in range(0, len(res), 2):  # splitting each two digits together to calculate the checksum
+        splitStr.append(res[i: i + 2])
+    checkSum = 0
+    for i in splitStr:  # converting each number into decimal then adding it to the sum
+        checkSum += int(i, 16)
+    checkSum = format(checkSum, "x")  # to convert into hexadecimal without 0x
+    checkSum = checkSum[-2:]  # to take last two bits
+    checkSum = "{0:08b}".format(int(checkSum, 16))  # to convert the hex checksum into binary to do 2's complement
+    onesComp = ""
+    for i in checkSum:  # to do 1's complement
+        if i == "1":
+            onesComp += "0"
+        else:
+            onesComp += "1"
+    twosComp = int(onesComp, 2) + 1  # to do 2's complement
+    finalCheckSum = format(twosComp, "x")  # converting the integer checksum into hexadecimal
+    finalCheckSum = finalCheckSum.capitalize()  # to make the checksum capital letter
+    result = res + finalCheckSum
+    print(result)
+    f = open("out.txt", "w")  # it will overwrite the file if it exists to write on it or creates a new one
+    f.write(": "+result+"\n")
+    f.write(": 00000001FF")
+    f.close()
+
+
+print("\n1-Read input from user(keyboard)")
+print("2-Read input from text file")
+flag="yes"
+# to check if the user wants to continue
+while flag == "yes":
+    choice = int(input("Please enter your choice:\n"))
+    if choice == 1:
+        data = input("Please enter the data separated by space\n").replace(':', ' ').split()
+        intelHex(data)
+    elif choice == 2:
+        file = input("Please enter the name of the text file\n")
+        file = open(file, "r")
+        file = file.read()
+        data = file.replace(':', ' ').replace(' ', ' ').split()
+        intelHex(data)
+    else:
+        print("Wrong entry!")
+    flag = input("\nIf you want to continue. please enter yes:\n").lower()
